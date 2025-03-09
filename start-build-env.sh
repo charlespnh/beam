@@ -34,6 +34,7 @@ docker build -t beam-build -f $DOCKER_FILE $DOCKER_DIR
 
 USER_NAME=${SUDO_USER:=$USER}
 USER_ID=$(id -u "${USER_NAME}")
+echo "User: ${USER}; User ID: ${USER_ID}; User Name: ${USER_NAME}"
 
 if [ "$(uname -s)" = "Darwin" ]; then
   GROUP_ID=100
@@ -49,7 +50,13 @@ fi
 
 if [ "$(uname -s)" = "Linux" ]; then
   DOCKER_GROUP_ID=$(getent group docker | cut -d':' -f3)
-  GROUP_ID=$(id -g "${USER_NAME}")
+  # GROUP_ID=$(id -g "${USER_NAME}")
+  GROUP_ID=100
+  getent group
+  echo "Group ID: ${GROUP_ID}, Docker Group ID: ${DOCKER_GROUP_ID}"
+  echo "User: ${USER}; User ID: ${USER_ID}; User Name: ${USER_NAME}"
+  getent group | grep "${USER_NAME}"
+  getent passwd
   # man docker-run
   # When using SELinux, mounted directories may not be accessible
   # to the container. To work around this, with Docker prior to 1.7
@@ -102,7 +109,7 @@ echo ""
 
 # If this env variable is empty, docker will be started
 # in non interactive mode
-DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
+# DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 
 DOCKER_SOCKET_MOUNT=""
 if [ -S /var/run/docker.sock ];

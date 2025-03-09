@@ -50,7 +50,7 @@ jobs:
           go-version: default
           python-version: default
       - name: "Build Docker dev image"
-        run: "sudo ./start-build-env.sh"
+        run: "./start-build-env.sh ./gradlew checkSetup"
         id: docker_env_build
       - name: "Gradle check"
         run: "./gradlew checkSetup"
