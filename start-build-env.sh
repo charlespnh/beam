@@ -52,11 +52,6 @@ if [ "$(uname -s)" = "Linux" ]; then
   DOCKER_GROUP_ID=$(getent group docker | cut -d':' -f3)
   # GROUP_ID=$(id -g "${USER_NAME}")
   GROUP_ID=100
-  getent group
-  echo "Group ID: ${GROUP_ID}, Docker Group ID: ${DOCKER_GROUP_ID}"
-  echo "User: ${USER}; User ID: ${USER_ID}; User Name: ${USER_NAME}"
-  getent group | grep "${USER_NAME}"
-  getent passwd
   # man docker-run
   # When using SELinux, mounted directories may not be accessible
   # to the container. To work around this, with Docker prior to 1.7

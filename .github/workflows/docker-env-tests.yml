@@ -49,9 +49,6 @@ jobs:
         with:
           go-version: default
           python-version: default
-      - name: "Build Docker dev image"
+      - name: "Build Docker dev image and Gradlew check"
         run: "./start-build-env.sh ./gradlew checkSetup"
         id: docker_env_build
-      - name: "Gradle check"
-        run: "./gradlew checkSetup"
-        id: docker_env_build_gradle_check
