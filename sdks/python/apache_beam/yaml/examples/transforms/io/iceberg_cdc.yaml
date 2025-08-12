@@ -1,0 +1,61 @@
+
+pipeline:
+  transforms:
+    # Read the data stream of taxi rides event from the public PubSub topic.
+    - type: ReadFromPubSub
+      name: ReadPubSub
+      config:
+        topic: "projects/pubsub-public-data/topics/taxirides-realtime"
+        format: "JSON"
+        schema:
+          type: object
+          properties:
+            ride_id: { type: string }
+            longitude: { type: number }
+            latitude: { type: number }
+            passenger_count: { type: integer }
+            meter_reading: { type: number }
+            timestamp: { type: string }
+            ride_status: { type: string }
+#      windowing:
+#        type: fixed
+#        size: 180s # 3 minutes
+
+    # Write the data stream to an Iceberg table.
+    # NOT WORKING YET !!!
+    - type: WriteToIceberg
+      name: WriteIceberg
+      input: ReadPubSub
+      config:
+        table: "demo.cdc"
+        catalog_name: "my_catalog"
+        triggering_frequency_seconds: 180
+        catalog_properties:
+          warehouse: "gs://apache-beam-testing-charlesng"
+          catalog-impl: "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog"
+          io-impl: "org.apache.iceberg.gcp.gcs.GCSFileIO"
+          gcp_project: "apache-beam-testing"
+          gcp_location: "us-central1"
+
+    # Read the data stream from the Iceberg CDC table.
+    # PERHAPS NOT READY YET !!!
+    - type: ReadFromIcebergCDC
+      name: ReadIcebergCDC
+      config:
+        table: "demo.cdc"
+        catalog_name: "my_catalog"
+        poll_interval_seconds: 60
+        catalog_properties:
+          warehouse: "gs://apache-beam-testing-charlesng"
+#          catalog-impl: "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog"
+#          io-impl: "org.apache.iceberg.gcp.gcs.GCSFileIO"
+#          gcp_project: "apache-beam-testing"
+#          gcp_location: "us-central1"
+
+
+providers:
+  - type: javaJar
+    config:
+      jar: "target/xlang-transforms-bundled-1.0-SNAPSHOT.jar"
+    transforms:
+      ReadFromIcebergCDC: "beam:transform:iceberg:cdc_read:v1"
