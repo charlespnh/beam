@@ -507,7 +507,7 @@ func (b *boundedTrie) accumulate(pyld []byte) error {
 }
 
 func (b *boundedTrie) toProto(key metricKey) *pipepb.MonitoringInfo {
-	payload, err := proto.Marshal(b.data.toProto())
+	payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(b.data.toProto())
 	if err != nil {
 		panic(fmt.Sprintf("error encoding bounded trie metric: %v", err))
 	}
@@ -527,8 +527,9 @@ type boundedTrieNode struct {
 
 func newBoundedTrieNode() *boundedTrieNode {
 	return &boundedTrieNode{
-		size:     1,
-		children: map[string]*boundedTrieNode{},
+		size:      1,
+		truncated: false,
+		children:  map[string]*boundedTrieNode{},
 	}
 }
 
@@ -542,6 +543,7 @@ func boundedTrieNodeFromProto(protoNode *pipepb.BoundedTrieNode) *boundedTrieNod
 	if len(children) == 0 {
 		return node
 	}
+
 	node.children = make(map[string]*boundedTrieNode, len(children))
 	var total int32 = 0
 	for prefix, child := range children {
@@ -571,9 +573,8 @@ func (n *boundedTrieNode) add(segments []string) int32 {
 	if n.truncated || len(segments) == 0 {
 		return 0
 	}
-	if n.children == nil {
-		n.children = make(map[string]*boundedTrieNode)
-	}
+
+	var delta int32 = 0
 	head := segments[0]
 	tail := segments[1:]
 	wasEmpty := len(n.children) == 0
@@ -581,15 +582,14 @@ func (n *boundedTrieNode) add(segments []string) int32 {
 	if !ok {
 		child = newBoundedTrieNode()
 		n.children[head] = child
-	}
-	var delta int32 = 0
-	if !ok {
+
 		if wasEmpty {
 			delta = 0
 		} else {
 			delta = 1
 		}
 	}
+
 	if len(tail) > 0 {
 		delta += child.add(tail)
 	}
@@ -598,41 +598,36 @@ func (n *boundedTrieNode) add(segments []string) int32 {
 }
 
 func (n *boundedTrieNode) merge(other *boundedTrieNode) int32 {
-	if n.truncated || other == nil {
+	if n.truncated {
 		return 0
 	}
 	if other.truncated {
 		delta := 1 - n.size
 		n.truncated = true
-		n.children = nil
+		n.children = map[string]*boundedTrieNode{}
 		n.size += delta
 		return delta
 	}
+
 	if len(other.children) == 0 {
 		return 0
 	}
 	if len(n.children) == 0 {
-		if n.children == nil {
-			n.children = make(map[string]*boundedTrieNode, len(other.children))
-		}
 		delta := other.size - n.size
 		for prefix, child := range other.children {
-			n.children[prefix] = child.clone()
+			n.children[prefix] = child
 		}
 		n.size += delta
 		return delta
 	}
+
 	var delta int32 = 0
 	for prefix, otherChild := range other.children {
-		if n.children == nil {
-			n.children = make(map[string]*boundedTrieNode)
-		}
 		if selfChild, ok := n.children[prefix]; ok {
-			delta += selfChild.merge(otherChild.clone())
+			delta += selfChild.merge(otherChild)
 		} else {
-			cloned := otherChild.clone()
-			n.children[prefix] = cloned
-			delta += cloned.size
+			n.children[prefix] = otherChild
+			delta += otherChild.size
 		}
 	}
 	n.size += delta
@@ -643,20 +638,19 @@ func (n *boundedTrieNode) trim() int32 {
 	if len(n.children) == 0 {
 		return 0
 	}
+
 	var maxChild *boundedTrieNode
 	for _, child := range n.children {
 		if maxChild == nil || child.size > maxChild.size {
 			maxChild = child
 		}
 	}
-	if maxChild == nil {
-		return 0
-	}
+
 	var delta int32
 	if maxChild.size == 1 {
 		delta = 1 - n.size
 		n.truncated = true
-		n.children = nil
+		n.children = map[string]*boundedTrieNode{}
 	} else {
 		delta = maxChild.trim()
 	}
@@ -684,10 +678,6 @@ type boundedTrieData struct {
 }
 
 func boundedTrieDataFromProto(protoData *pipepb.BoundedTrie) *boundedTrieData {
-	if protoData == nil {
-		return &boundedTrieData{}
-	}
-
 	data := &boundedTrieData{
 		bound: protoData.GetBound(),
 	}
@@ -750,9 +740,9 @@ func (d *boundedTrieData) combine(other *boundedTrieData) *boundedTrieData {
 }
 
 func (d *boundedTrieData) toProto() *pipepb.BoundedTrie {
-	protoData := &pipepb.BoundedTrie{Bound: int32(d.bound)}
+	protoData := &pipepb.BoundedTrie{Bound: d.bound}
 	if len(d.singleton) > 0 {
-		protoData.Singleton = append([]string(nil), d.singleton...)
+		protoData.Singleton = append(protoData.Singleton, d.singleton...)
 	}
 	if d.root != nil {
 		protoData.Root = d.root.toProto()
