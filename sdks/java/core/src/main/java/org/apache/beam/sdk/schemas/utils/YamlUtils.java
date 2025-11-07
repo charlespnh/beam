@@ -19,6 +19,8 @@ package org.apache.beam.sdk.schemas.utils;
 
 import static org.apache.beam.sdk.values.Row.toRow;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.Collections;
@@ -38,6 +40,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.yaml.snakeyaml.Yaml;
 
 public class YamlUtils {
+  private static final ObjectMapper JSON_OBJECT_MAPPER = new ObjectMapper();
   private static final Map<Schema.TypeName, Function<String, @Nullable Object>> YAML_VALUE_PARSERS =
       ImmutableMap
           .<Schema.TypeName,
@@ -113,6 +116,11 @@ public class YamlUtils {
       return yamlValue;
     }
 
+    if ((yamlValue instanceof Map || yamlValue instanceof List)
+        && fieldType.getTypeName() == Schema.TypeName.STRING) {
+      return serializeYamlValueToJsonString(field, yamlValue);
+    }
+
     if (yamlValue instanceof List) {
       FieldType innerType =
           Preconditions.checkNotNull(
@@ -175,6 +183,17 @@ public class YamlUtils {
 
   private static String maybeGetSnakeCase(String str, boolean getSnakeCase) {
     return getSnakeCase ? CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, str) : str;
+  }
+
+  private static String serializeYamlValueToJsonString(Field field, Object yamlValue) {
+    try {
+      return JSON_OBJECT_MAPPER.writeValueAsString(yamlValue);
+    } catch (JsonProcessingException e) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Failed to convert YAML value for field \"%s\" to JSON string.", field.getName()),
+          e);
+    }
   }
 
   public static String yamlStringFromMap(@Nullable Map<String, Object> map) {

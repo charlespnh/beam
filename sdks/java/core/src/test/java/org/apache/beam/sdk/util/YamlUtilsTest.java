@@ -19,8 +19,10 @@ package org.apache.beam.sdk.util;
 
 import static org.junit.Assert.assertEquals;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -28,6 +30,7 @@ import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.schemas.utils.YamlUtils;
 import org.apache.beam.sdk.values.Row;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.base.CaseFormat;
+import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.ImmutableMap;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.io.BaseEncoding;
 import org.junit.Rule;
 import org.junit.Test;
@@ -174,6 +177,42 @@ public class YamlUtilsTest {
   @Test
   public void testAllTypesFlat() {
     assertEquals(FLAT_ROW, YamlUtils.toBeamRow(FLAT_YAML, FLAT_SCHEMA));
+  }
+
+  @Test
+  public void testMapCoercedIntoJsonStringField() throws Exception {
+    String yamlString =
+        "string_field:\n"
+            + "  type: object\n"
+            + "  properties:\n"
+            + "    value:\n"
+            + "      type: string\n";
+    Schema schema = Schema.builder().addStringField("string_field").build();
+
+    Row row = YamlUtils.toBeamRow(yamlString, schema);
+    ObjectMapper mapper = new ObjectMapper();
+    Map<String, Object> parsed = mapper.readValue(row.getString("string_field"), Map.class);
+
+    Map<String, Object> expected =
+        ImmutableMap.of(
+            "type",
+            "object",
+            "properties",
+            ImmutableMap.of("value", ImmutableMap.of("type", "string")));
+    assertEquals(expected, parsed);
+  }
+
+  @Test
+  public void testListCoercedIntoJsonStringField() throws Exception {
+    String yamlString = "string_field:\n" + "  - foo\n" + "  - bar\n";
+    Schema schema = Schema.builder().addStringField("string_field").build();
+
+    Row row = YamlUtils.toBeamRow(yamlString, schema);
+    ObjectMapper mapper = new ObjectMapper();
+    @SuppressWarnings("unchecked")
+    List<String> parsed = mapper.readValue(row.getString("string_field"), List.class);
+
+    assertEquals(Arrays.asList("foo", "bar"), parsed);
   }
 
   @Test
